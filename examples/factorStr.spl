@@ -1,0 +1,52 @@
+# SPL factorizing input
+# read a number
+# print its factors
+#   one per line, with "*"
+#   between each factor (each line)
+#
+{
+    new mynum := 200;
+    while mynum > 100 {
+	write 'enter a number (up to 100)';
+	mynum := read;
+    }
+    new curr := mynum;
+    new needstar := false;
+    #
+    # first the twos
+    while (curr % 2) = 0 {
+	if needstar = true { write_ '*'; needstar := false;}
+	write_ 2;
+	needstar := true;
+	curr := curr / 2;
+    }
+    #
+    # now the threes
+    while (curr % 3) = 0 {
+	if needstar = true { write_ '*'; needstar := false;}
+	write_ 3;
+	needstar := true;
+	curr := curr / 3;
+    }
+    #
+    # now the fives
+    while (curr % 5) = 0 {
+	if needstar = true { write_ '*'; needstar := false;}
+	write_ 5;
+	needstar := true;
+	curr := curr / 5;
+    }
+    #
+    # now the sevens
+    while (curr % 7) = 0 {
+	if needstar = true { write_ '*'; needstar := false;}
+	write_ 7;
+	needstar := true;
+	curr := curr / 7;
+    }
+    if (curr != 1) {
+        if needstar = true {write_ '*'; needstar := false;}
+	write_ curr;
+    }
+    write ' ';
+}

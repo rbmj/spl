@@ -1,0 +1,19 @@
+{
+    fun fact x {
+        if (x = 0) { return 1; }
+        return x * (fact @ (x - 1));
+    }
+    fun main x {
+        new mynum := 200;
+        while mynum > 12 {
+            write 'enter a number (up to 12)';
+            mynum := read;
+        }
+        write_ mynum;
+        write_ '! = ';
+        write fact @ mynum;
+        return 0;
+    }
+
+    main @ 0;
+}

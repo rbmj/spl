@@ -1,0 +1,176 @@
+/* SI 413 Fall 2015
+ * Lab 7
+ * Parser for SPL that just shows the parse tree
+ * This parser uses a simpler grammar with assoc/prec specifications.
+ */
+
+// This code is included in the spl.tab.hpp header file
+%code requires {
+
+#include <cstdlib>
+#include <iostream>
+using namespace std;
+
+#include "ast.hpp"
+#include <readline/readline.h>
+#include <readline/history.h>
+int yylex(); 
+
+void switchbuf(const char*);
+void delbuf();
+
+} // end header file part
+
+// This code is only included in the parser file spl.tab.cpp
+%code {
+
+// These are the colored output streams to make things all pretty.
+colorout resout(1, 'u');
+colorout errout(2, 'r');
+
+// Global variable will be set to the entire AST.
+Stmt* tree;
+
+// Global variable to indicate if an error has occurred.
+bool error;
+
+// Global variable to indicate that terminal input is "live" and
+// so prompts should be displayed.
+bool showPrompt;
+
+// This is the C file that flex reads from for scanning.
+extern FILE* yyin;
+
+void yyerror(const char *p) { 
+  if (! error) {
+    errout << "Parser error: " << p << endl; 
+    error = true;
+  }
+}
+
+} // end top of parser part
+
+  /* Tell bison to give descriptive error mesages. */
+%error-verbose
+
+%union {
+  Block* block;
+  Stmt* stmt;
+  Exp* exp;
+  StrExp* strexp;
+  Id* id;
+  Oper op;
+};
+
+%left<op> BOP
+%right<op> NOTTOK
+%left<op> COMP
+%left<op> OPA
+%left<op> OPM
+%right POSNEG
+%left FUNARG
+
+%token LC RC LP RP FUN IF IFELSE WHILE READ WRITE WRITE_ NEW ASN STOP RET
+%token<id> ID
+%token<exp> NUM BOOL
+%token<strexp> STR
+%type<stmt> stmt stmtlist
+%type<block> block
+%type<exp> exp
+
+%%
+  /*Note: YYACCEPT is a bison macro that just tells it to quit parsing.*/
+res: stmt { tree = $1; YYACCEPT; }
+|         { tree = NULL; }
+
+block: LC stmtlist RC { $$ = new Block($2); }
+
+stmtlist: stmtlist stmt { $$ = Stmt::append($1,$2); }
+|                       { $$ = new NullStmt; }
+
+stmt: NEW ID ASN exp STOP    {$$ = new NewStmt($2,$4);}
+|     ID ASN exp STOP        {$$ = new Asn($1,$3);}
+|     WRITE exp STOP         {$$ = new Write($2);}
+|     WRITE_ exp STOP        {$$ = new Write($2, false);}
+|     WRITE STR STOP         {$$ = new WriteStr($2);}
+|     WRITE_ STR STOP        {$$ = new WriteStr($2, false);}
+|     IF exp block           {$$ = new IfStmt($2,$3,new NullStmt());}
+|     IFELSE exp block block {$$ = new IfStmt($2,$3,$4);}
+|     WHILE exp block        {$$ = new WhileStmt($2,$3);}
+|     FUN ID ID block        {$$ = new Fun($2, $3, $4);}
+|     RET exp STOP           {$$ = new Return($2);}
+|     exp STOP               {$$ = new ExpStmt($1);}
+|     block                  {$$ = $1;}
+
+exp: exp BOP exp          {$$ = new BoolOp($1,$2,$3);}
+|    NOTTOK exp           {$$ = new NotOp($2);}
+|    exp COMP exp         {$$ = new CompOp($1,$2,$3);}
+|    exp OPA exp          {$$ = new ArithOp($1,$2,$3);}
+|    exp OPM exp          {$$ = new ArithOp($1,$2,$3);}
+|    OPA exp %prec POSNEG {$$ = ($1 == ADD ? $2 : new NegOp($2));}
+|    READ                 {$$ = new Read();}
+|    ID FUNARG exp        {$$ = new Funcall($1,$3);}
+|    LP exp RP            {$$ = $2;}
+|    ID                   {$$ = $1;}
+|    NUM                  {$$ = $1;}
+|    BOOL                 {$$ = $1;}
+
+%%
+int main(int argc, char** argv) {
+  showPrompt = isatty(0) && isatty(2);
+  bool interactive = showPrompt;
+
+  if (argc >= 2) {
+    if (!(yyin = fopen(argv[1],"r"))) {
+      cerr << "Could not open input file \"" << argv[1] << "\"!" << endl;
+      exit(2);
+    }
+    interactive = false;
+  }
+
+  if (interactive) {
+    bool showAST = false; // set to false to stop the AST from popping up.
+    // This is the "interactive" version of the interpreter.
+    // It keeps going, even if there are errors, and prints out
+    // prompts and such.
+    while(true) {
+      tree = NULL;
+      error = false;
+      char * input = readline("spl> ");
+      if (!input) {
+        break;
+      }
+      add_history(input);
+      switchbuf(input);
+      yyparse();
+      delbuf();
+      free(input);
+      if (tree == NULL && ! error) break;
+      else if (tree != NULL) {
+        tree->writeDot("spl.dot");
+        system("dot -Tpdf spl.dot > spl.pdf");
+        if (showAST) system("evince spl.pdf > /dev/null 2>&1 &");
+        tree->exec();
+      }
+    }
+    cerr << "Goodbye" << endl;
+  }
+  else {
+    // This is the non-interactive version of the interpreter.
+    // It exits with return code 5 if there is any kind of error,
+    // and doesn't display prompts or other niceties.
+    error = false;
+    codeGenContext ctx;
+    ctx.parent = NULL;
+    while(! error) {
+      tree = NULL;
+      if (yyparse() != 0 || error || tree == NULL) break;
+      tree->execCode(ctx);
+    }
+    ctx.generateCode(argv[1]);
+    if (error) return 5;
+  }
+
+  return 0;
+}
+

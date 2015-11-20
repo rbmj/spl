@@ -1,0 +1,88 @@
+/* SI 413 Fall 2015
+ * Lab 7
+ * This is a scanner specification for the SPL programming language.
+ * The semantic values are either leaves in the AST or operator codes.
+ */
+
+%{
+#include <iostream>
+#include <cstdlib>
+using namespace std;
+#include "value.hpp"
+#include "ast.hpp"
+#include "spl.tab.hpp"
+
+// Called if there is a scanner error
+void scanerror() {
+  if (! error) {
+    errout << "Unrecognized token starting with " << yytext << endl;
+    error = true;
+  }
+}
+
+// Returns the type of comparison operator that we are seeing.
+Oper getCompOp(const char* text) {
+  switch(text[0]) {
+    case '=': return EQ;
+    case '!': return NE;
+    case '>': return (text[1] == '=' ? GE : GT);
+    case '<': return (text[1] == '=' ? LE : LT);
+    default: exit(8); // never reached
+  }
+}
+
+// Strips leading and trailing quote marks from the given C string
+char* quotestrip(char* str) {
+  char* toret = str;
+  while (toret[0] == '"') ++toret;
+  for (int i=0; toret[i] != '\0'; ++i) {
+    if (toret[i] == '"') toret[i] = '\0';
+  }
+  return toret;
+}
+
+void switchbuf(const char* input) {
+    yy_switch_to_buffer(yy_scan_string(input));
+}
+
+void delbuf() {
+    yy_delete_buffer(YY_CURRENT_BUFFER);
+}
+
+%}
+
+%option noyywrap
+%option nounput
+
+%%
+
+[0-9]+     {yylval.exp = new Num(atoi(yytext)); return NUM;}
+true|false {yylval.exp = new BoolExp(yytext[0] == 't'); return BOOL;}
+[+-]       {yylval.op = (yytext[0] == '+' ? ADD : SUB); return OPA;}
+[*/%]       {yylval.op = (yytext[0] == '*' ? MUL : (yytext[0] == '/' ? DIV : MOD)); return OPM;}
+and|or     {yylval.op = (yytext[0] == 'a' ? AND : OR); return BOP;}
+not        {yylval.op = NOT; return NOTTOK;}
+'([^\\\']|\\.)*' { yylval.strexp = new StrExp(yytext); return STR;}
+":="       {return ASN;}
+"@"        {return FUNARG;}
+"("        {return LP;}
+")"        {return RP;}
+"{"        {return LC;}
+"}"        {return RC;}
+";"        {return STOP;}
+[><=]|([><!]=) {yylval.op = getCompOp(yytext); return COMP;}
+if         {return IF;}
+ifelse     {return IFELSE;}
+while      {return WHILE;}
+read       {return READ;}
+write_     {return WRITE_;}
+write      {return WRITE;}
+fun        {return FUN;}
+new        {return NEW;}
+return     {return RET;}
+[a-zA-Z0-9_]+ {yylval.id = new Id(yytext); return ID;}
+<<EOF>>  { return 0; }
+[ \t\n]+ { }
+"#".*    { }
+.        { scanerror(); return -1; }
+%%
